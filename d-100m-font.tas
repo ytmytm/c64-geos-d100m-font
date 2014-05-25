@@ -1,0 +1,568 @@
+;24.01.1997 ;zrobic tez dwie wersje bez
+;23.02.1997 ;dialogBox'u dla GeoChart
+;26.06.1997
+;30.06.1997
+;01.07.1997
+
+loadb    .macro
+         lda #\1
+         sta \2
+         .endm
+loadw    .macro
+         lda #<\1
+         sta \2
+         lda #>\1
+         sta \2+1
+         .endm
+
+minchar  = $22
+maxchar  = minchar+79
+
+
+         *= $7902
+
+mb       = $02
+sb       = $03
+
+;---------------------------------------
+         ;jmp init4print
+         ;byte $4c,$60
+         .byte $79
+         jmp startpr
+         jmp prline
+         jmp stoppr
+         jmp getdimen
+         jmp prascii
+         jmp startas
+         jmp setnlq
+;---------------------------------------
+stoppr   lda stat
+         beq nieasci
+         jsr open
+         lda #13
+         jsr $ffa8
+         jmp close
+nieasci  jmp checkbuf
+;---------------------------------------
+startpr  lda #0
+         sta stat
+         jmp start
+;---------------------------------------
+startas  lda #1
+         sta stat
+         jmp start
+;---------------------------------------
+start    lda #0
+         sta $90
+         jsr open
+         lda $90
+         tax
+         bne fault
+         ldx #0
+sploop   lda initseq,x
+         jsr $ffa8
+         inx
+         cpx #(initseqend-initseq)
+         bne sploop
+         jsr close
+         ldx #0
+         rts
+fault    jsr close
+         ldx #$80
+         rts
+;---------------------------------------
+init4print
+         #loadw $851e,2
+         #loadw merk,4
+         #loadw 420,6
+         jsr $c17e
+         #loadw param,mb
+         jsr $c256
+         lda mb
+         cmp #4
+         beq niehi
+         lda #"g"
+         sta hi1+1
+         jmp endin
+
+niehi    lda #"h"
+         sta hi1+1
+
+endin    #loadw merk,2
+         #loadw $851e,4
+         #loadw 420,6
+         jsr $c17e
+         ldx #0
+         rts
+
+param    .byte $01
+         .byte 32+8
+         .byte 127+8
+         .word 64
+         .word 255
+
+         .byte 11,20,20
+         .word txt
+         .byte 3,1,72
+         .byte 4,17,72
+         .byte 0
+
+txt      .byte 24
+         .text "high quality ?"
+         .byte 27,0
+
+;---------------------------------------
+prascii
+         jsr open
+
+ascloop  ldy #$00
+         lda (mb),y
+         beq endascii
+         cmp #13
+         bne i1010
+         jsr $ffa8
+         lda #10
+         jmp print
+i1010    cmp #$84
+         bne i1018
+         lda #$bb
+         bne print
+i1018    cmp #$94
+         bne i1020
+         lda #$bc
+         bne print
+i1020    cmp #$81
+         bne i1028
+         lda #$bd
+         bne print
+i1028    cmp #$e1
+         bne i1030
+         lda #$be
+         bne print
+i1030    cmp #$8e
+         bne i1038
+         lda #$7b
+         bne print
+i1038    cmp #$99
+         bne i1040
+         lda #$7c
+         bne print
+i1040    cmp #$9a
+         bne i1048
+         lda #$7d
+         bne print
+i1048    cmp #$41
+         bcc print
+         cmp #$7b
+         bcs print
+         eor #$20
+print    jsr $ffa8
+         inc mb
+         bne *+4
+         inc sb
+         jmp ascloop
+
+endascii jmp close
+;---------------------------------------
+getdimen lda #0
+         ldx #80
+         ldy #100
+         rts
+;---------------------------------------
+setnlq   jsr open
+         lda #27
+         jsr $ffa8
+         lda #120
+         jsr $ffa8
+         lda #1
+         jsr $ffa8
+         jmp close
+;---------------------------------------
+prline   jsr copybuf
+
+         lda mb
+         pha
+         lda sb
+         pha
+
+mloop1   jsr initprint
+
+         #loadb minchar,char
+         #loadb minchar,char+1
+         #loadb 0,kol
+
+mloop0   jsr readmem
+         jsr testchr
+         bcc nie01
+         lda char
+         ldx kol
+         sta string,x
+         jsr obchar
+         jsr prchar
+         jmp mcont
+
+nie01    lda #$20
+         ldx kol
+         sta string,x
+
+mcont    lda mb
+         clc
+         adc #8
+         sta mb
+         lda sb
+         adc #0
+         sta sb
+         inc kol
+         inc char
+         inc char+1
+         lda char
+         cmp #maxchar
+         bne mloop0
+
+         jsr open
+         jsr checkstring
+         bcc linefeed
+         jsr prstring
+         lda #13
+         jsr $ffa8
+         jsr setempty2
+         jsr prstring
+         lda #13
+         jsr $ffa8
+         jsr close
+
+         #loadb 0,kol
+         #loadb minchar,char
+         #loadb minchar,char+1
+
+mlooop   jsr prchar2
+         jsr testchr2
+         bcc nie022
+         ldx kol
+         lda char
+         sta string,x
+         jsr prchar
+         jmp mcont2
+
+nie022   lda #$20
+         ldx kol
+         sta string,x
+
+mcont2   inc char
+         inc char+1
+         inc kol
+
+         lda char
+         cmp #maxchar
+         bne mlooop
+
+         jsr open
+         jsr checkstring
+         bcc linefeed
+         jsr setempty2
+         jsr prstring
+
+         ldx #0
+mloop2   lda #$20
+         sta string,x
+         lda #0
+         sta string2,x
+         inx
+         cpx kol
+         bne mloop2
+
+linefeed lda #13
+         jsr $ffa8
+         lda #10
+         jsr $ffa8
+         jsr close
+
+         pla
+         sta sb
+         pla
+         sta mb
+         ldx #0
+         rts
+kol      .byte 0
+;---------------------------------------
+prstring ldx #0
+prst     lda string,x
+         jsr $ffa8
+         inx
+         cpx kol
+         bne prst
+         rts
+;---------------------------------------
+setempty2 ldy #1
+         ldx #0
+prplp0   lda roz2,x
+         jsr $ffa8
+         inx
+         cpx #roze2-roz2
+         bne prplp0
+         rts
+
+roz2     .byte 27,"*",3
+         .word 2
+         .byte 0,0
+roze2
+;---------------------------------------
+testchr  ldx #0
+tclp     lda tabelka,x
+         bne nie0
+         inx
+         cpx #8
+         bne tclp
+         clc
+         rts
+nie0     sec
+         rts
+;---------------------------------------
+testchr2 ldx #0
+tclp2    lda znak,x
+         bne nie02
+         inx
+         cpx #8
+         bne tclp2
+         clc
+         rts
+nie02    sec
+         rts
+;---------------------------------------
+checkstring
+         ldx #0
+cslp     lda string,x
+         cmp #$20
+         bne csnt
+         inx
+         cpx kol
+         bne cslp
+         clc
+         rts
+csnt     sec
+         rts
+;---------------------------------------
+initprint
+         jsr open
+         ldx #0
+inloop   lda init,x
+         jsr $ffa8
+         inx
+         cpx #iniend-init
+         bne inloop
+         jmp close
+;---------------------------------------
+readmem
+         ldy #0
+loop2    lda (mb),y
+         sta tabelka,y
+         iny
+         cpy #8
+         bne loop2
+         rts
+;---------------------------------------
+obchar   lda #0
+         ldx #0
+loop25   sta znak,x
+         inx
+         cpx #8
+         bne loop25
+
+         ldx #0
+loop3    ldy #0
+loop4    lda tabelka,y
+         clc
+         asl a
+         sta tabelka,y
+         rol znak,x
+         iny
+         cpy #8
+         bne loop4
+         inx
+         cpx #8
+         bne loop3
+         ldx kol
+         lda znak+7
+         sta string2,x
+         rts
+;---------------------------------------
+open     lda #4
+         jsr $c2b0
+         jsr $c25c
+         lda #4
+         jsr $ffb1
+         lda #$67
+         jmp $ff93
+;---------------------------------------
+close    jsr $ffae
+         jsr $c25f
+         ldx #0
+         rts
+;---------------------------------------
+prchar
+trloop1  jsr open
+         ldx #0
+trloop2  lda def,x
+         jsr $ffa8
+         inx
+         cpx #defend-def
+         bne trloop2
+         ldy #0
+         lda znak,y
+         jsr $ffa8
+         iny
+         lda znak,y
+         jsr $ffa8
+         iny
+         jsr $ffa8
+         lda znak,y
+         jsr $ffa8
+         iny
+         lda znak,y
+         jsr $ffa8
+         iny
+         jsr $ffa8
+         lda znak,y
+         jsr $ffa8
+         iny
+         lda znak,y
+         jsr $ffa8
+         iny
+         jsr $ffa8
+         lda znak,y
+         jsr $ffa8
+         iny
+         lda znak,y
+         jsr $ffa8
+         lda #27
+         jsr $ffa8
+         lda #"#"
+         jsr $ffa8
+         jmp close
+;---------------------------------------
+prchar2  ldy #0
+         ldx kol
+         tya
+pc2lp    sta znak,y
+         iny
+         cpy #7
+         bne pc2lp
+         lda string2,x
+         sta znak+7
+         rts
+;---------------------------------------
+copybuf  ldy #0
+colop1   lda (mb),y
+         sta (4),y
+         iny
+         bne colop1
+         inc sb
+         inc 5
+colop2   lda (mb),y
+         sta (4),y
+         iny
+         bne colop2
+         inc sb
+         inc 5
+colop3   lda (mb),y
+         sta (4),y
+         iny
+         cpy #$80
+         bne colop3
+         dec sb
+         dec 5
+         dec sb
+         dec 5
+         rts
+;---------------------------------------
+checkbuf ldy #0
+chlop1   lda (mb),y
+         cmp (4),y
+         bne cfault
+         iny
+         bne chlop1
+         inc sb
+         inc 5
+chlop2   lda (mb),y
+         cmp (4),y
+         bne cfault
+         iny
+         bne chlop2
+         inc sb
+         inc 5
+chlop3   lda (mb),y
+         cmp (4),y
+         bne cfault
+         iny
+         cpy #$80
+         bne chlop3
+         dec sb
+         dec 5
+         dec sb
+         dec 5
+         rts
+
+cfault   dec sb
+         dec 5
+         dec sb
+         dec 5
+         jmp prline
+;---------------------------------------
+initseq  .byte 27,"%",0,0
+         .byte 27,"2"
+         .byte 27,120,0
+         .byte 27,"h"
+initseqend
+
+init
+         .byte 27,"%",1,0
+hi1      .byte 27,"g"
+         .byte 27,"3",24
+
+iniend
+
+def      .byte 27,">"
+         .byte 27,"&",0
+char     .byte $40
+         .byte $40
+         .byte $8b
+defend
+
+wiersz   .byte 0
+stat     .byte 0
+znak     .byte 0,0,0,0,0,0,0,0
+tabelka  .byte 0,0,0,0,0,0,0,0
+
+string   .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20,$20,$20,$20
+         .byte $20,$20,$20
+
+string2  .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00,$00,$00,$00
+         .byte $00,$00,$00
+
+;---------------------------------------
+merk
+
